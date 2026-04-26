@@ -86,6 +86,12 @@ def get_token_ids(text: str, model_name: str) -> List[int]:
     tokenizer = get_tokenizer(model_name)
     return tokenizer.encode(text, add_special_tokens=False)
 
+def get_mtp_factor(model_name: str) -> int:
+    """Extract MTP factor from model name, e.g. 'test-model-mtp3' -> 3."""
+    import re
+    match = re.search(r'mtp(\d+)', model_name)
+    return int(match.group(1)) if match else 1
+
 @app.get("/models")
 @app.get("/v1/models")
 async def list_models():
@@ -185,6 +191,7 @@ async def chat_completions(request: ChatCompletionRequest):
             token_text = COHERENCE_TEST_RESPONSE + " " if is_coherence_test else "mock "
             all_token_ids = get_token_ids(token_text, request.model)
             single_token_id = all_token_ids[0] if all_token_ids else 0
+            mtp_factor = get_mtp_factor(request.model)
 
             include_token_ids = request.return_token_ids if hasattr(request, 'return_token_ids') else False
 
@@ -211,7 +218,7 @@ async def chat_completions(request: ChatCompletionRequest):
                 }
                 
                 if include_token_ids:
-                    chunk["choices"][0]["token_ids"] = [single_token_id]
+                    chunk["choices"][0]["token_ids"] = [single_token_id] * mtp_factor
                 
                 yield f"data: {json.dumps(chunk)}\n\n"
             
