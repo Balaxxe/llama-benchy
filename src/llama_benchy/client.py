@@ -199,7 +199,7 @@ class LLMClient:
                 decoder = codecs.getincrementaldecoder("utf-8")(errors='replace')
                 buffer = ""
                 
-                async for chunk_bytes in response.content:
+                async for chunk_bytes in response.content.iter_any():
                     chunk_time = time.perf_counter()
                     decoded_chunk = decoder.decode(chunk_bytes, final=False)
                     buffer += decoded_chunk
