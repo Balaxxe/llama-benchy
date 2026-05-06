@@ -16,15 +16,40 @@ class BenchmarkFailure(Exception):
     pass
 
 class BenchmarkRunner:
-    def __init__(self, config: BenchmarkConfig, client: LLMClient, prompt_generator: PromptGenerator):
+    def __init__(self, config: BenchmarkConfig, client: LLMClient, prompt_generator: PromptGenerator, progress=None):
         self.config = config
         self.client = client
         self.prompt_gen = prompt_generator
         self.results = BenchmarkResults()
+        self.progress = progress
+        self._next_request_id = 0
 
         # We need to track deltas from warmup to adapt prompts
         self.delta_user = 0
         self.delta_context = 0
+
+    def _new_request_id(self) -> int:
+        rid = self._next_request_id
+        self._next_request_id += 1
+        return rid
+
+    def _emit_request_start(self, request_id: int, pp: int, tg: int, depth: int, concurrency: int, run_index: int) -> None:
+        if self.progress is None:
+            return
+        try:
+            self.progress.request_start(
+                request_id=request_id,
+                model=self.config.model,
+                base_url=self.config.base_url,
+                prompt_size=pp,
+                response_size=tg,
+                context_size=depth,
+                concurrency=concurrency,
+                run_index=run_index,
+                target_label="",
+            )
+        except Exception:
+            pass
 
     async def run_suite(self):
         # Initialize session
@@ -55,6 +80,13 @@ class BenchmarkRunner:
 
                 # Measure latency
                 latency = await self.client.measure_latency(session, self.config.latency_mode)
+                if self.progress is not None:
+                    try:
+                        self.progress.latency_measured(
+                            latency_s=latency, mode=self.config.latency_mode
+                        )
+                    except Exception:
+                        pass
 
                 # Main Loop
                 for depth in self.config.depths:
@@ -98,13 +130,18 @@ class BenchmarkRunner:
                                         load_tasks = []
                                         for i in range(concurrency):
                                             context, _ = prompt_batch[i]
+                                            rid = self._new_request_id()
+                                            if not is_warmup:
+                                                self._emit_request_start(rid, pp, tg, depth, concurrency, run)
                                             load_tasks.append(self.client.run_generation(
                                                 session,
                                                 context_text=context,
                                                 prompt_text="",
                                                 max_tokens=tg,
                                                 no_cache=self.config.no_cache,
-                                                tokenizer=tokenizer
+                                                tokenizer=tokenizer,
+                                                progress=None if is_warmup else self.progress,
+                                                request_id=None if is_warmup else rid,
                                             ))
 
                                         load_results = await asyncio.gather(*load_tasks)
@@ -121,13 +158,18 @@ class BenchmarkRunner:
                                         inf_tasks = []
                                         for i in range(concurrency):
                                             context, prompt = prompt_batch[i]
+                                            rid = self._new_request_id()
+                                            if not is_warmup:
+                                                self._emit_request_start(rid, pp, tg, depth, concurrency, run)
                                             inf_tasks.append(self.client.run_generation(
                                                 session,
                                                 context_text=context,
                                                 prompt_text=prompt,
                                                 max_tokens=tg,
                                                 no_cache=self.config.no_cache,
-                                                tokenizer=tokenizer
+                                                tokenizer=tokenizer,
+                                                progress=None if is_warmup else self.progress,
+                                                request_id=None if is_warmup else rid,
                                             ))
 
                                         batch_results = await asyncio.gather(*inf_tasks)
@@ -146,13 +188,18 @@ class BenchmarkRunner:
                                         batch_tasks = []
                                         for i in range(concurrency):
                                             context, prompt = prompt_batch[i]
+                                            rid = self._new_request_id()
+                                            if not is_warmup:
+                                                self._emit_request_start(rid, pp, tg, depth, concurrency, run)
                                             batch_tasks.append(self.client.run_generation(
                                                 session,
                                                 context_text=context,
                                                 prompt_text=prompt,
                                                 max_tokens=tg,
                                                 no_cache=self.config.no_cache,
-                                                tokenizer=tokenizer
+                                                tokenizer=tokenizer,
+                                                progress=None if is_warmup else self.progress,
+                                                request_id=None if is_warmup else rid,
                                             ))
 
                                         batch_results = await asyncio.gather(*batch_tasks)

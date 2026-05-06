@@ -351,6 +351,26 @@ JSON (`--format json`) will give you the most detailed data. If you specify `--s
 
 You can also instantiate llama-benchy classes and run analysis directly from Python. See [Jupyter Notebook example](examples/benchmark_visualization.ipynb).
 
+## Live progress stream (for external visualizers)
+
+`--emit-progress PATH` writes a stream of newline-delimited JSON events to
+`PATH` (or `-` for stdout) while the benchmark runs. External visualizers —
+live TUIs, web dashboards, post-hoc analyzers — consume that stream and
+render whatever they like.
+
+```bash
+# Emit to a file alongside the normal benchmark
+llama-benchy --base-url http://localhost:8000/v1 --model … \
+             --emit-progress /tmp/progress.jsonl
+
+# Pipe straight into a visualizer (status output goes to stderr in this mode)
+llama-benchy --base-url http://localhost:8000/v1 --model … \
+             --emit-progress - | my-visualizer
+```
+
+Default behavior is unchanged when `--emit-progress` is omitted. Schema
+spec: [`docs/progress-schema.md`](docs/progress-schema.md).
+
 ## Development
 
 ### Running Integration Tests

@@ -272,13 +272,15 @@ class LLMClient:
         return delta_user, delta_context
 
     async def run_generation(
-            self, 
-            session: aiohttp.ClientSession, 
-            context_text: str, 
-            prompt_text: str, 
-            max_tokens: int, 
+            self,
+            session: aiohttp.ClientSession,
+            context_text: str,
+            prompt_text: str,
+            max_tokens: int,
             no_cache: bool,
-            tokenizer=None
+            tokenizer=None,
+            progress=None,
+            request_id: Optional[int] = None,
         ) -> RequestResult:
 
         messages = []
@@ -298,6 +300,7 @@ class LLMClient:
                     error_text = await response.text()
                     result.error = f"HTTP {response.status}: {error_text}"
                     print(result.error)
+                    self._emit_request_end(progress, request_id, result)
                     return result
 
                 decoder = codecs.getincrementaldecoder("utf-8")(errors='replace')
@@ -336,16 +339,32 @@ class LLMClient:
                                 if 'choices' in chunk and len(chunk['choices']) > 0:
                                     if result.first_response_ts is None:
                                         result.first_response_ts = chunk_time
+                                        if progress is not None and request_id is not None:
+                                            try:
+                                                progress.request_first_response(
+                                                    request_id=request_id,
+                                                    ttfr_s=chunk_time - result.start_ts,
+                                                )
+                                            except Exception:
+                                                pass
 
                                     delta = chunk['choices'][0].get('delta', {})
                                     content = delta.get('content')
                                     reasoning_content = delta.get('reasoning_content')
                                     reasoning = delta.get('reasoning')
-                                    
+
                                     if content or reasoning_content or reasoning:
                                         if result.first_token_ts is None:
                                             result.first_token_ts = chunk_time
-                                        
+                                            if progress is not None and request_id is not None:
+                                                try:
+                                                    progress.request_first_token(
+                                                        request_id=request_id,
+                                                        ttft_s=chunk_time - result.start_ts,
+                                                    )
+                                                except Exception:
+                                                    pass
+
                                         token_ids = chunk['choices'][0].get('token_ids')
                                         text = content or reasoning_content or reasoning
                                         content_chunks.append({
@@ -353,6 +372,20 @@ class LLMClient:
                                             "timestamp": chunk_time,
                                             "token_ids": token_ids,
                                         })
+
+                                        if progress is not None and request_id is not None:
+                                            # Best-effort per-chunk count for the live stream.
+                                            # The authoritative total is reconciled in
+                                            # _finalize_stream_tokens and reported by request_end.
+                                            chunk_count = len(token_ids) if isinstance(token_ids, list) else 1
+                                            try:
+                                                progress.tokens(
+                                                    request_id=request_id,
+                                                    count=chunk_count,
+                                                    snippet=text or "",
+                                                )
+                                            except Exception:
+                                                pass
                             except json.JSONDecodeError:
                                 continue
 
@@ -362,5 +395,25 @@ class LLMClient:
         except Exception as e:
             print(f"Error during run: {e}")
             result.error = str(e)
-        
+
+        self._emit_request_end(progress, request_id, result)
         return result
+
+    @staticmethod
+    def _emit_request_end(progress, request_id: Optional[int], result: "RequestResult") -> None:
+        """Emit the request_end progress event for a finished request."""
+        if progress is None or request_id is None:
+            return
+        decode_seconds = 0.0
+        if result.first_token_ts is not None and result.end_ts:
+            decode_seconds = max(0.0, result.end_ts - result.first_token_ts)
+        try:
+            progress.request_end(
+                request_id=request_id,
+                total_tokens=result.total_tokens,
+                prompt_tokens=result.prompt_tokens,
+                decode_seconds=decode_seconds,
+                error=result.error or "",
+            )
+        except Exception:
+            pass

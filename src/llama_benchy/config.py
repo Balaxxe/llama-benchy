@@ -74,6 +74,10 @@ class BenchmarkConfig(BaseModel):
         default_factory=dict,
         description="Extra JSON fields to merge into benchmark chat completion requests",
     )
+    emit_progress: Optional[str] = Field(
+        None,
+        description="Emit progress events as JSONL to PATH (or '-' for stdout). See docs/progress-schema.md.",
+    )
 
     @staticmethod
     def _parse_extra_body(values: Optional[List[str]]) -> Dict[str, Any]:
@@ -354,6 +358,17 @@ class BenchmarkConfig(BaseModel):
             default=[],
             help="Extra JSON fields to merge into benchmark chat completion requests. Accepts key=value or key:value, comma-separated or repeated.",
         )
+        parser.add_argument(
+            "--emit-progress",
+            type=str,
+            default=None,
+            metavar="PATH",
+            help=(
+                "Emit benchmark progress events as JSONL to PATH (or '-' for stdout). "
+                "External visualizers (live TUIs, web dashboards, post-hoc charts) "
+                "consume this stream. Schema: docs/progress-schema.md."
+            ),
+        )
 
         args = parser.parse_args()
 
@@ -416,4 +431,5 @@ class BenchmarkConfig(BaseModel):
             exit_on_first_fail=args.exit_on_first_fail,
             no_results_on_fail=args.no_results_on_fail,
             extra_body=extra_body,
+            emit_progress=args.emit_progress,
         )
