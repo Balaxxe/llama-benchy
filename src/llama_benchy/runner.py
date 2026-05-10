@@ -68,9 +68,10 @@ class BenchmarkRunner:
                                 expected_pp = pp
                                 expected_ctx = depth
 
-                                for run in range(self.config.num_runs + 1):
-                                    is_warmup = run == 0
-                                    run_label = "Warmup" if is_warmup else f"Run {run}/{self.config.num_runs}"
+                                total_runs = self.config.num_runs if self.config.no_warmup else self.config.num_runs + 1
+                                for run in range(total_runs):
+                                    is_warmup = not self.config.no_warmup and run == 0
+                                    run_label = "Warmup" if is_warmup else f"Run {run if not self.config.no_warmup else run + 1}/{self.config.num_runs}"
 
                                     # Adapt prompt tokens
                                     current_pp = pp
