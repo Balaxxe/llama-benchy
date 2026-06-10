@@ -64,6 +64,13 @@ class BenchmarkResults:
         self.metadata: Optional[BenchmarkMetadata] = None
         self.model_name: Optional[str] = None
 
+    def _count_tokens_after_first_timestamp(self, timestamps: List[float]) -> int:
+        if len(timestamps) < 2:
+            return 0
+
+        first_ts = timestamps[0]
+        return sum(1 for ts in timestamps if ts > first_ts)
+
     def _calculate_metric(self, values: List[float], multiplier: float = 1.0) -> Optional[BenchmarkMetric]:
         if not values:
             return None
@@ -309,8 +316,9 @@ class BenchmarkResults:
             
             if res.total_tokens > 1 and len(res.token_timestamps) > 1:
                 decode_time = res.token_timestamps[-1] - res.token_timestamps[0]
-                if decode_time > 0:
-                    tg_speed = (res.total_tokens - 1) / decode_time
+                decode_tokens = self._count_tokens_after_first_timestamp(res.token_timestamps)
+                if decode_time > 0 and decode_tokens > 0:
+                    tg_speed = decode_tokens / decode_time
                     agg_tg_speeds.append(tg_speed)
         
         if save_all_throughput_timeseries and agg_req_throughput_series is not None:
@@ -336,7 +344,10 @@ class BenchmarkResults:
             tg_duration = max_last_token - min_first_token
             
             if tg_duration > 0:
-                observed_decode_tokens = sum(max(0, len(r.token_timestamps) - 1) for r in valid_results)
+                observed_decode_tokens = sum(
+                    self._count_tokens_after_first_timestamp(r.token_timestamps)
+                    for r in valid_results
+                )
                 if observed_decode_tokens > 0:
                     batch_tg_throughput = observed_decode_tokens / tg_duration
                     agg_batch_tg_throughputs.append(batch_tg_throughput)

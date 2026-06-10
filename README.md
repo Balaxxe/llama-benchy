@@ -162,6 +162,7 @@ Generally you don't need to disable prompt caching on the server, as a probabili
 -   `--tokenizer`: HuggingFace tokenizer name or local path (Defaults to model name).
 -   `--pp`: List of prompt processing token counts (Default: [2048]).
 -   `--tg`: List of token generation counts (Default: [32]).
+-   `--exact-tg`: Force output length to match `--tg` by sending `min_tokens=<tg>` and `ignore_eos=true` in benchmark requests. This is useful for fixed-OSL throughput runs on compatible servers such as vLLM.
 -   `--depth`: List of context depths (Default: [0]).
 -   `--runs`: Number of runs per test (Default: 3).
 -   `--no-cache`: Add noise to requests to improve prefix caching avoidance. Also sends `cache-prompt=false` to the server.
@@ -180,6 +181,18 @@ Generally you don't need to disable prompt caching on the server, as a probabili
 -   `--save-all-throughput-timeseries`: Save calculated throughput timeseries for EACH individual request (default: off).
 -   `--exit-on-first-fail`: Stop execution on first failed test and exit with non-zero status.
 -   `--no-results-on-fail`: Prevent saving/printing any results when error is experienced, turns on --exit-on-first-fail as well.
+-   `--extra-body`: Extra JSON fields to merge into benchmark chat completion requests. Accepts repeated or comma-separated `key=value` / `key:value` entries, e.g. `--extra-body min_tokens=1024,ignore_eos=true`.
+
+For fixed-output-length throughput benchmarks, prefer `--exact-tg` over manually passing `min_tokens` and `ignore_eos`:
+
+```bash
+llama-benchy \
+  --base-url http://localhost:8000/v1 \
+  --model my-model \
+  --pp 2160 \
+  --tg 1024 \
+  --exact-tg
+```
 
 ### Metrics
 
@@ -198,7 +211,7 @@ The script attempts to estimate network or processing latency to provide "server
 
 -   **`t/s` (Tokens per Second)**:
     -   **For Prompt Processing (pp)**: Calculated as `Total Prompt Tokens / est_ppt`. This represents the prefill speed.
-    -   **For Token Generation (tg)**: Calculated as `(Total Generated Tokens - 1) / (Time of Last Token - Time of First Token)`. This represents the decode speed, excluding the first token latency. If the backend emits the whole response, or a block of tokens, in a single content-bearing stream chunk, there is no observable token-to-token interval and decode throughput is left blank instead of reporting a protocol-timing artifact.
+    -   **For Token Generation (tg)**: Calculated as `Tokens observed after the first token timestamp / (Time of Last Token - Time of First Token)`. This represents decode speed over the observable post-first-token interval. For block-streaming backends, all tokens that arrive with the first content timestamp are excluded because they have no observable generation interval. If the backend emits the whole response in a single content-bearing stream chunk, decode throughput is left blank instead of reporting a protocol-timing artifact.
         -   When `concurrency` > 1:
         -   **`t/s (total)`**: Total throughput across all concurrent requests.
         -   **`t/s (req)`**: Average throughput per individual request.

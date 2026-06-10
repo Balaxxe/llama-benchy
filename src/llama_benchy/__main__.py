@@ -29,7 +29,13 @@ async def main_async():
     
     # 4. Initialize Components
     prompt_gen = PromptGenerator(corpus)
-    client = LLMClient(config.base_url, config.api_key, config.served_model_name)
+    client = LLMClient(
+        config.base_url,
+        config.api_key,
+        config.served_model_name,
+        config.extra_body,
+        config.exact_tg,
+    )
     runner = BenchmarkRunner(config, client, prompt_gen)
     
     # 5. Run Benchmark Suite

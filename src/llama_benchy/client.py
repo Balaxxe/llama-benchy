@@ -21,11 +21,42 @@ class RequestResult:
     token_timestamps: List[float] = field(default_factory=list)
 
 class LLMClient:
-    def __init__(self, base_url: str, api_key: str, model_name: str):
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str,
+        model_name: str,
+        extra_body: Optional[Dict[str, Any]] = None,
+        exact_tg: bool = False,
+    ):
         self.base_url = base_url
         self.api_key = api_key
         self.model_name = model_name
+        self.extra_body = extra_body or {}
+        self.exact_tg = exact_tg
         self.headers = {"Authorization": f"Bearer {api_key}"}
+
+    def _build_generation_payload(self, messages: List[Dict[str, str]], max_tokens: int, no_cache: bool) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {
+            "model": self.model_name,
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "stream": True,
+            "return_token_ids": True,
+            "stream_options": {"include_usage": True},
+        }
+
+        if no_cache:
+            payload["cache_prompt"] = False
+
+        payload.update(self.extra_body)
+
+        if self.exact_tg:
+            payload["max_tokens"] = max_tokens
+            payload["min_tokens"] = max_tokens
+            payload["ignore_eos"] = True
+
+        return payload
 
     async def measure_latency(self, session: aiohttp.ClientSession, mode: str = "api") -> float:
         if mode == "none":
@@ -175,17 +206,7 @@ class LLMClient:
         result = RequestResult()
         
         try:
-            payload = {
-                "model": self.model_name,
-                "messages": messages,
-                "max_tokens": max_tokens,
-                "stream": True,
-                "return_token_ids": True,
-                "stream_options": {"include_usage": True},
-            }
-            
-            if no_cache:
-                payload["cache_prompt"] = False
+            payload = self._build_generation_payload(messages, max_tokens, no_cache)
             
             result.start_ts = time.perf_counter()
 

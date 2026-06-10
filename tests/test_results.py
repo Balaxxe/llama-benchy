@@ -45,3 +45,25 @@ def test_burst_output_does_not_report_decode_throughput():
     tg_row = next(row for row in rows if row["test_name"] == "tg1024")
     assert tg_row["t_s"] is None
     assert tg_row["peak_ts"] is not None
+
+
+def test_block_streaming_excludes_first_observed_block_from_decode_throughput():
+    first_block = [1.0] * 256
+    second_block = [1.25 + (0.75 * (i + 1) / 256) for i in range(256)]
+
+    result = RequestResult(
+        start_ts=0.0,
+        first_response_ts=0.9,
+        first_token_ts=1.0,
+        end_ts=2.01,
+        prompt_tokens=2048,
+        total_tokens=512,
+        token_timestamps=first_block + second_block,
+    )
+
+    results = BenchmarkResults()
+    results.add("model", 2048, 512, 0, 1, [[result]], latency=0.0, expected_pp_tokens=2048)
+
+    run = results.runs[0]
+    assert run.tg_throughput is not None
+    assert run.tg_throughput.mean == pytest.approx(256.0)
