@@ -131,7 +131,11 @@ Emitted exactly once per request (including failed ones).
 Emitted exactly once at the end of the entire benchmark suite. Consumers
 SHOULD treat this as the final frame and exit cleanly.
 
-No additional fields beyond the common ones.
+| Field    | Type   | Notes                                                                                   |
+|----------|--------|-----------------------------------------------------------------------------------------|
+| `status` | string | `"ok"` — suite ran to completion. `"interrupted"` — Ctrl+C / SIGINT. `"error"` — unhandled exception. |
+
+Consumers SHOULD treat unknown `status` values as `"error"`.
 
 ## Ordering invariants
 
@@ -193,5 +197,5 @@ A two-token, single-request bench produces:
 {"schema":"llama-benchy-progress.v1","type":"tokens","ts":1714969500.911,"request_id":0,"count":1,"snippet":"Hello"}
 {"schema":"llama-benchy-progress.v1","type":"tokens","ts":1714969500.932,"request_id":0,"count":1,"snippet":" world"}
 {"schema":"llama-benchy-progress.v1","type":"request_end","ts":1714969500.945,"request_id":0,"total_tokens":2,"prompt_tokens":2048,"decode_seconds":0.055,"error":""}
-{"schema":"llama-benchy-progress.v1","type":"bench_complete","ts":1714969501.000}
+{"schema":"llama-benchy-progress.v1","type":"bench_complete","ts":1714969501.000,"status":"ok"}
 ```

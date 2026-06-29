@@ -119,8 +119,8 @@ class ProgressEmitter:
             error=error,
         )
 
-    def bench_complete(self) -> None:
-        self._emit("bench_complete")
+    def bench_complete(self, status: str = "ok") -> None:
+        self._emit("bench_complete", status=status)
 
     def close(self) -> None:
         with self._lock:

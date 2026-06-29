@@ -49,12 +49,19 @@ async def main_async():
     runner = BenchmarkRunner(config, client, prompt_gen, progress=progress)
 
     # 5. Run Benchmark Suite
+    status = "ok"
     try:
         await runner.run_suite()
+    except KeyboardInterrupt:
+        status = "interrupted"
+        raise
+    except BaseException:
+        status = "error"
+        raise
     finally:
         if progress is not None:
             try:
-                progress.bench_complete()
+                progress.bench_complete(status=status)
             finally:
                 progress.close()
 
