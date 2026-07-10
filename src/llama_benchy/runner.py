@@ -79,7 +79,12 @@ class BenchmarkRunner:
                     print("\nSkipping coherence test (--skip-coherence specified)")
 
                 # Measure latency
-                latency = await self.client.measure_latency(session, self.config.latency_mode)
+                warmup_runs = 0 if self.config.no_warmup else self.config.warmup_runs
+                latency = await self.client.measure_latency(
+                    session,
+                    self.config.latency_mode,
+                    warmup_runs=warmup_runs,
+                )
                 if self.progress is not None:
                     try:
                         self.progress.latency_measured(
@@ -100,10 +105,15 @@ class BenchmarkRunner:
                                 expected_pp = pp
                                 expected_ctx = depth
 
-                                total_runs = self.config.num_runs if self.config.no_warmup else self.config.num_runs + 1
+                                total_runs = self.config.num_runs + warmup_runs
                                 for run in range(total_runs):
-                                    is_warmup = not self.config.no_warmup and run == 0
-                                    run_label = "Warmup" if is_warmup else f"Run {run if not self.config.no_warmup else run + 1}/{self.config.num_runs}"
+                                    is_warmup = run < warmup_runs
+                                    measured_run_index = run - warmup_runs
+                                    run_label = (
+                                        f"Warmup {run + 1}/{warmup_runs}"
+                                        if is_warmup
+                                        else f"Run {measured_run_index + 1}/{self.config.num_runs}"
+                                    )
 
                                     # Adapt prompt tokens
                                     current_pp = pp
@@ -132,7 +142,7 @@ class BenchmarkRunner:
                                             context, _ = prompt_batch[i]
                                             if not is_warmup:
                                                 rid = self._new_request_id()
-                                                self._emit_request_start(rid, pp, tg, depth, concurrency, run)
+                                                self._emit_request_start(rid, pp, tg, depth, concurrency, measured_run_index)
                                             load_tasks.append(self.client.run_generation(
                                                 session,
                                                 context_text=context,
@@ -160,7 +170,7 @@ class BenchmarkRunner:
                                             context, prompt = prompt_batch[i]
                                             if not is_warmup:
                                                 rid = self._new_request_id()
-                                                self._emit_request_start(rid, pp, tg, depth, concurrency, run)
+                                                self._emit_request_start(rid, pp, tg, depth, concurrency, measured_run_index)
                                             inf_tasks.append(self.client.run_generation(
                                                 session,
                                                 context_text=context,
@@ -190,7 +200,7 @@ class BenchmarkRunner:
                                             context, prompt = prompt_batch[i]
                                             if not is_warmup:
                                                 rid = self._new_request_id()
-                                                self._emit_request_start(rid, pp, tg, depth, concurrency, run)
+                                                self._emit_request_start(rid, pp, tg, depth, concurrency, measured_run_index)
                                             batch_tasks.append(self.client.run_generation(
                                                 session,
                                                 context_text=context,

@@ -165,6 +165,7 @@ Generally you don't need to disable prompt caching on the server, as a probabili
 -   `--exact-tg`: Force output length to match `--tg` by sending `min_tokens=<tg>` and `ignore_eos=true` in benchmark requests. This is useful for fixed-OSL throughput runs on compatible servers such as vLLM.
 -   `--depth`: List of context depths (Default: [0]).
 -   `--runs`: Number of runs per test (Default: 3).
+-   `--warmup-runs`: Number of discarded warmup runs per test shape (Default: 1). For concurrency `N`, each warmup run sends `N` requests. Also controls the number of discarded warmup probes for `--latency-mode generation`; it does not affect the initial prompt-adaptation warmup.
 -   `--no-cache`: Add noise to requests to improve prefix caching avoidance. Also sends `cache-prompt=false` to the server.
 -   `--post-run-cmd`: Command to execute after each test run.
 -   `--book-url`: URL of a book to use for text generation (Defaults to Sherlock Holmes).
@@ -203,7 +204,7 @@ The script outputs a table with the following metrics. All time measurements are
 The script attempts to estimate network or processing latency to provide "server-side" processing times.
 - **Latency**: Measured based on `--latency-mode`.
   - `api`: Time to fetch `/models` (from sending request to getting first byte of the response). Eliminates network latency only.
-  - `generation`: Time to generate 1 token (from sending request to getting first byte of the response). Tries to eliminate network and server overhead latency.
+  - `generation`: Time to generate 1 token (from sending request to getting first byte of the response). Tries to eliminate network and server overhead latency. By default this sends 4 single-token streaming probes, discards the first as a request-shape warmup, and averages the remaining 3. `--warmup-runs` controls the number of discarded generation-latency probes.
   - `none`: Assumed to be 0.
 - This measured latency is subtracted from `ttfr` to calculate `est_ppt`.
 

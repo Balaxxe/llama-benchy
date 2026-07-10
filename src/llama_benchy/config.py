@@ -33,6 +33,10 @@ class BenchmarkConfig(BaseModel):
         ..., description="List of context depths (previous conversation tokens)"
     )
     num_runs: int = Field(..., description="Number of runs per test")
+    warmup_runs: int = Field(
+        1,
+        description="Number of discarded warmup runs per test shape; also used for generation latency probes",
+    )
     no_cache: bool = Field(
         ..., description="Ensure unique requests to avoid prefix caching"
     )
@@ -269,6 +273,16 @@ class BenchmarkConfig(BaseModel):
             "--runs", type=int, default=3, help="Number of runs per test - default: 3"
         )
         parser.add_argument(
+            "--warmup-runs",
+            type=int,
+            default=1,
+            help=(
+                "Number of discarded warmup runs per test shape - default: 1. "
+                "Also controls discarded probes for --latency-mode generation. "
+                "Does not affect the initial prompt-adaptation warmup."
+            ),
+        )
+        parser.add_argument(
             "--no-cache",
             action="store_true",
             help="Ensure unique requests to avoid prefix caching and send cache_prompt=false to the server",
@@ -374,6 +388,8 @@ class BenchmarkConfig(BaseModel):
 
         if args.no_results_on_fail:
             args.exit_on_first_fail = True
+        if args.warmup_runs < 0:
+            parser.error("--warmup-runs must be >= 0")
 
         try:
             extra_body = BenchmarkConfig._parse_extra_body(args.extra_body)
@@ -415,6 +431,7 @@ class BenchmarkConfig(BaseModel):
             exact_tg=args.exact_tg,
             depths=args.depth,
             num_runs=args.runs,
+            warmup_runs=args.warmup_runs,
             no_cache=args.no_cache,
             latency_mode=args.latency_mode,
             no_warmup=args.no_warmup,

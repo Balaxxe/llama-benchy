@@ -152,15 +152,31 @@ class LLMClient:
         result.total_tokens = len(content_chunks)
         result.token_timestamps = chunk_times
 
-    async def measure_latency(self, session: aiohttp.ClientSession, mode: str = "api") -> float:
+    async def measure_latency(
+        self,
+        session: aiohttp.ClientSession,
+        mode: str = "api",
+        warmup_runs: int = 1,
+        measured_runs: int = 3,
+    ) -> float:
         if mode == "none":
             print("Skipping latency measurement (assuming 0 ms).")
             return 0
 
-        print(f"Measuring latency using mode: {mode}...")
+        warmup_runs = max(0, warmup_runs)
+        measured_runs = max(0, measured_runs)
+        if mode == "generation" and warmup_runs > 0:
+            print(
+                f"Measuring latency using mode: {mode} "
+                f"({warmup_runs} warmup + {measured_runs} measured probes)..."
+            )
+        else:
+            print(f"Measuring latency using mode: {mode}...")
         latencies = []
+        total_runs = measured_runs + (warmup_runs if mode == "generation" else 0)
         
-        for _ in range(3):
+        for probe_idx in range(total_runs):
+            is_warmup = mode == "generation" and probe_idx < warmup_runs
             start = time.perf_counter()
             try:
                 if mode == "api":
@@ -176,7 +192,9 @@ class LLMClient:
                     }
                     async with session.post(f"{self.base_url}/chat/completions", json=payload, headers=self.headers) as response:
                         async for _ in response.content:
-                            latencies.append(time.perf_counter() - start)
+                            elapsed = time.perf_counter() - start
+                            if not is_warmup:
+                                latencies.append(elapsed)
                             break
                         async for _ in response.content: pass
             except Exception as e:

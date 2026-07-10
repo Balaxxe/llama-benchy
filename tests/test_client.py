@@ -2,6 +2,7 @@ import json
 
 import pytest
 
+import llama_benchy.client as client_module
 from llama_benchy.client import CONTEXT_LOAD_USER_MESSAGE, LLMClient
 
 
@@ -11,6 +12,9 @@ _MISSING = object()
 class _FakeContent:
     def __init__(self, events):
         self._events = events
+
+    def __aiter__(self):
+        return self.iter_any()
 
     async def iter_any(self):
         for event in self._events:
@@ -221,6 +225,29 @@ async def test_warmup_uses_context_probe_and_excludes_it_from_delta():
         {"role": "user", "content": CONTEXT_LOAD_USER_MESSAGE},
     ]
     assert messages[-1]["content"].strip()
+
+
+@pytest.mark.asyncio
+async def test_generation_latency_discards_warmup_probes(monkeypatch):
+    client = LLMClient("http://example.test/v1", "EMPTY", "model")
+    session = _FakeSession([b"data: {}\n\n", b"data: [DONE]\n\n"])
+    ticks = iter([
+        0.0, 100.0,  # discarded warmup probe
+        10.0, 11.0,
+        20.0, 22.0,
+        30.0, 33.0,
+    ])
+    monkeypatch.setattr(client_module.time, "perf_counter", lambda: next(ticks))
+
+    latency = await client.measure_latency(
+        session,
+        mode="generation",
+        warmup_runs=1,
+        measured_runs=3,
+    )
+
+    assert latency == pytest.approx(2.0)
+    assert len(session.requests) == 4
 
 
 @pytest.mark.asyncio
